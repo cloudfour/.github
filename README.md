@@ -12,6 +12,10 @@ Defaults don't appear in a repository's file list or in clones, so a contributor
 
 Because a change here reaches every repository at once, keep these files general. Anything project-specific belongs in that project.
 
+The defaults here are:
+
+- [`.github/pull_request_template.md`](.github/pull_request_template.md): our standard pull request template, described in the [git guide](https://github.com/cloudfour/guides/tree/main/git#pull-request-template).
+
 ## Reusable workflows
 
 Workflows in `.github/workflows/` that run `on: workflow_call` can be called from any repository:
