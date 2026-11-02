@@ -1,0 +1,7 @@
+{
+  "name": "Dependency drift check",
+  "description": "Keep an issue open while the default branch has dependency changes that aren't published to npm yet.",
+  "iconName": "octicon package-dependencies",
+  "categories": ["JavaScript"],
+  "filePatterns": ["^package\\.json$"]
+}
