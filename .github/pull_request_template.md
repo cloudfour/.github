@@ -6,7 +6,7 @@ context, trade-offs, and anything a reviewer might otherwise question.
 
 ## Screenshots
 
-For visual changes, show what changed.
+Visual changes should include a screenshot.
 
 ## Testing
 
