@@ -149,9 +149,12 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
-      - uses: cloudfour/.github/actions/oldest-peer-dependencies@main
+      - name: Downgrade to the oldest supported peer dependencies
+        uses: cloudfour/.github/actions/oldest-peer-dependencies@main
       - run: npm test
 ```
+
+The `name` is optional, but without it the job log shows the step as **Run cloudfour/.github/actions/oldest-peer-dependencies@main**.
 
 ## Workflow templates
 
