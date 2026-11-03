@@ -1,0 +1,14 @@
+# This repository uses Dependabot instead of cloudfour/renovate-config, because
+# it can't be added to the Renovate app's installation. Its only dependencies
+# are the actions its reusable workflows use, so this covers just those (#13).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    # The root covers `.github/workflows/`.
+    directory: /
+    schedule:
+      interval: weekly
+    # Matches the three-day wait in our shared Renovate preset, so a release
+    # that gets pulled soon after publishing never reaches a pull request.
+    cooldown:
+      default-days: 3
