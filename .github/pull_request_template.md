@@ -1,21 +1,21 @@
 ## Overview
 
-Please include a summary of the change and which issue is fixed.
-Please also include relevant motivation and context.
-List any dependencies that are required for this change.
+Explain why this change exists: what problem it solves, and how. The
+diff already shows what changed, so focus on what it can't: context,
+trade-offs, and anything a reviewer might otherwise question.
 
 ## Screenshots
 
-Visual changes should include a screenshot.
+For visual changes, show what changed.
 
 ## Testing
 
-1. instructions for reviewers
-1. to test your changes
+Provide detailed, step-by-step instructions aimed at a reviewer who is
+unfamiliar with this project. Tell them what to do and what they'll see.
+
+- [ ] First step, and what the reviewer should see
+- [ ] Next step, and what the reviewer should see
 
 ---
 
-- Fixes # (issue)
-- or [TrelloCard/Issue/Story](LINK_TO_STORY)
-
-/CC @person
+Fixes #
