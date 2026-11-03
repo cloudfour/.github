@@ -74,16 +74,123 @@ jobs:
               }
             }
 
+            // An exact version, or a `^` or `~` range on one such as `^17.12.0`,
+            // which is how Renovate writes the ranges the `library` preset keeps.
+            // Anything else, such as `^1 || ^2` or `>=1 <3`, can't be compared
+            // without a semver library, so those rows show as `range`.
+            const SIMPLE = /^\s*(=|[~^])?\s*v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?\s*$/;
+            const parse = (value) => {
+              const match = SIMPLE.exec(value ?? '');
+              if (!match) return undefined;
+              const [, operator = '', major, minor, patch, prerelease] = match;
+              return {
+                operator: operator === '=' ? '' : operator,
+                parts: [major, minor, patch].map(Number),
+                prerelease,
+                version: `${major}.${minor}.${patch}${prerelease ? `-${prerelease}` : ''}`,
+              };
+            };
+
+            const upstreamChange = ({ before, after }) => {
+              if (before === undefined) return 'added';
+              if (after === undefined) return 'removed';
+              const from = parse(before);
+              const to = parse(after);
+              if (!from || !to || from.operator !== to.operator) return 'range';
+              const index = from.parts.findIndex((part, i) => part !== to.parts[i]);
+              if (index !== -1) return ['major', 'minor', 'patch'][index];
+              // Same version written differently, such as `v1.2.3` and `1.2.3`.
+              return from.prerelease === to.prerelease ? 'none' : 'prerelease';
+            };
+
+            // npmdiff.dev only accepts a scoped name with the `@` and `/` encoded.
+            const whatChanged = ({ name, before, after }) => {
+              const from = parse(before);
+              const to = parse(after);
+              if (from && to && from.version !== to.version) {
+                return `[diff](https://npmdiff.dev/${encodeURIComponent(name)}/${from.version}/${to.version}/)`;
+              }
+              const version = (to ?? from)?.version;
+              return `[npm](https://www.npmjs.com/package/${name}${version ? `/v/${version}` : ''})`;
+            };
+
+            for (const change of changes) change.upstream = upstreamChange(change);
+
             // Pipes in a range such as `^1 || ^2` would split a table cell.
             const cell = (value) =>
               value === undefined ? '_none_' : `\`${String(value).replaceAll('|', '\\|')}\``;
             const table = [
-              `| Field | Package | ${published.version} on npm | On \`${branch}\` |`,
-              '| --- | --- | --- | --- |',
+              `| Field | Package | ${published.version} on npm | On \`${branch}\` | Upstream change | What changed |`,
+              '| --- | --- | --- | --- | --- | --- |',
               ...changes.map(
                 (change) =>
-                  `| \`${change.field}\` | \`${change.name}\` | ${cell(change.before)} | ${cell(change.after)} |`,
+                  `| \`${change.field}\` | \`${change.name}\` | ${cell(change.before)} | ${cell(change.after)} | ${change.upstream} | ${whatChanged(change)} |`,
               ),
+            ].join('\n');
+
+            // The suggestion only sets a floor. Version numbers can't show how
+            // this package uses a dependency: a minor bump to a shared config
+            // can add error-level rules, which makes it a major release here.
+            const breakingReason = (change) => {
+              if (change.field === 'peerDependencies') {
+                return 'changes a peer dependency, which changes what projects must install alongside this one';
+              }
+              if (change.upstream === 'removed') {
+                return 'is removed, and projects may be using it without depending on it themselves';
+              }
+              if (change.upstream === 'major') {
+                return 'is a major upstream release';
+              }
+              return undefined;
+            };
+            const breaking = changes.filter(breakingReason);
+            const unassessed = changes.filter(
+              (change) => change.upstream === 'range' && !breaking.includes(change),
+            );
+            const suggestion = [
+              '### Suggested release',
+              '',
+              ...(breaking.length > 0
+                ? [
+                    'Start from **major**, because of:',
+                    '',
+                    ...breaking.map((change) => `- \`${change.name}\` ${breakingReason(change)}`),
+                    '',
+                    "This comes from the version numbers alone. If you've checked that none of these reach users, a smaller release may be enough.",
+                  ]
+                : [
+                    'Start from **patch or minor**, depending on whether users see a difference.',
+                    '',
+                    'This comes from the version numbers alone, so treat it as a floor. A minor upstream release can still need a major here if it changes what users see, such as a shared config adding error-level rules.',
+                  ]),
+              ...(unassessed.length > 0
+                ? [
+                    '',
+                    `Check these by hand, since their ranges can't be compared automatically: ${unassessed.map((change) => `\`${change.name}\``).join(', ')}.`,
+                  ]
+                : []),
+            ].join('\n');
+
+            const NOUNS = {
+              dependencies: 'dependency',
+              optionalDependencies: 'optional dependency',
+              peerDependencies: 'peer dependency',
+            };
+            const bullet = ({ field, name, before, after, upstream }) => {
+              if (upstream === 'added') return `- Adds \`${name}\` \`${after}\` as a ${NOUNS[field]}.`;
+              if (upstream === 'removed') return `- Removes the \`${name}\` ${NOUNS[field]}.`;
+              const subject = field === 'dependencies' ? `\`${name}\`` : `The \`${name}\` ${NOUNS[field]}`;
+              return `- ${subject} moves from \`${before}\` to \`${after}\`.`;
+            };
+            // A code block, so the bullets copy as Markdown instead of rendered text.
+            const changelog = [
+              '### Draft changelog',
+              '',
+              'Add a sentence to each bullet saying what it means for users.',
+              '',
+              '```md',
+              ...changes.map(bullet),
+              '```',
             ].join('\n');
 
             // Only the default branch maintains the issue. A run on any other
@@ -94,7 +201,7 @@ jobs:
                 .addRaw(
                   changes.length === 0
                     ? `\`${branch}\` matches ${pkg.name}@${published.version} on npm.`
-                    : table,
+                    : [table, suggestion, changelog].join('\n\n'),
                 )
                 .write();
               core.notice(
@@ -144,6 +251,10 @@ jobs:
 
             ${table}
             ${versionNote}
+            ${suggestion}
+
+            ${changelog}
+
             Publish a release to ship these, or leave this open if they're waiting to go out with other changes. This issue updates as more changes land, and closes itself once npm matches \`${branch}\`.
 
             <sub>Maintained by the [dependency drift check](https://github.com/cloudfour/.github#dependency-drift-check).</sub>
