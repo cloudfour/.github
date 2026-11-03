@@ -1,0 +1,52 @@
+name: Oldest peer dependencies
+description: Replaces each installed peer dependency with the oldest published release its range in package.json allows, without changing package.json or the lockfile.
+
+# Run it after `npm ci` and before the tests, so they run against the oldest
+# versions a package claims to support. See the README for an example.
+runs:
+  using: composite
+  steps:
+    # Asks npm for the oldest published release in each peer range rather than
+    # working it out from the range, which can name a version that was never
+    # published: TypeScript went from 6.0.1-rc to 6.0.2, so `>=6.0.0 <6.1.0`
+    # starts at 6.0.2. Installing a version that doesn't exist doesn't fail,
+    # npm hangs. A range that matches nothing fails here with npm's E404.
+    - name: Downgrade to the oldest supported peer dependencies
+      shell: bash
+      run: |
+        specs="$(node --print '
+          const { execFileSync } = require("node:child_process");
+          const peers = Object.entries(require("./package.json").peerDependencies ?? {});
+          if (peers.length === 0) throw new Error("package.json has no peerDependencies to downgrade");
+
+          // Semver order without a dependency. npm only returns a prerelease
+          // when a range names one, such as `>=6.0.1-rc`, and a prerelease
+          // sorts before its release.
+          const parse = (version) => {
+            const [core, prerelease] = version.split(/-(.*)/s);
+            return { core: core.split(".").map(Number), prerelease: prerelease?.split(".") ?? [] };
+          };
+          const compareIdentifiers = (a, b) => {
+            const [x, y] = [a, b].map((id) => (/^\d+$/.test(id) ? Number(id) : id));
+            if (typeof x === typeof y) return x < y ? -1 : x > y ? 1 : 0;
+            return typeof x === "number" ? -1 : 1;
+          };
+          const byVersion = (a, b) => {
+            const [x, y] = [a, b].map(parse);
+            const core = x.core[0] - y.core[0] || x.core[1] - y.core[1] || x.core[2] - y.core[2];
+            if (core !== 0) return core;
+            if (!x.prerelease.length || !y.prerelease.length) return y.prerelease.length - x.prerelease.length;
+            for (let i = 0; i < Math.min(x.prerelease.length, y.prerelease.length); i++) {
+              const order = compareIdentifiers(x.prerelease[i], y.prerelease[i]);
+              if (order !== 0) return order;
+            }
+            return x.prerelease.length - y.prerelease.length;
+          };
+
+          peers.map(([name, range]) => {
+            const published = [JSON.parse(execFileSync("npm", ["view", `${name}@${range}`, "version", "--json"]))].flat();
+            return `${name}@${published.sort(byVersion)[0]}`;
+          }).join(" ")
+        ')"
+        echo "Testing against $specs"
+        npm install --no-save $specs

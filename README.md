@@ -110,6 +110,52 @@ jobs:
 
 The calling workflow needs to grant at least `contents: read`, the permission the job needs to check out the repository.
 
+## Shared actions
+
+A reusable workflow replaces a whole job. When what's shared is a step that has to run inside a repository's own job, it's a composite action in `actions/` instead:
+
+```yaml
+steps:
+  - uses: cloudfour/.github/actions/<action>@main
+```
+
+These reference `main` too, for the same reason as the reusable workflows.
+
+### Oldest peer dependencies
+
+[`oldest-peer-dependencies`](actions/oldest-peer-dependencies/action.yml) replaces each installed peer dependency with the oldest published release its range in `package.json` allows. Run after `npm ci`, it lets the tests check the oldest end of each range a package claims to support. It doesn't change `package.json` or the lockfile.
+
+It asks npm which releases match each range and doesn't work it out from the range, because the oldest version a range allows may never have been published. TypeScript went from `6.0.1-rc` to `6.0.2`, so `>=6.0.0 <6.1.0` starts at `6.0.2`. A range that matches no published release fails with npm's `E404`, and a `package.json` with no `peerDependencies` fails too, since there's nothing to test.
+
+Use it with the [oldest Node versions](#oldest-node-versions) job to test both floors at once:
+
+```yaml
+jobs:
+  oldest-node-versions:
+    uses: cloudfour/.github/.github/workflows/oldest-node-versions.yml@main
+
+  test-oldest-supported:
+    name: test-oldest-supported (Node ${{ matrix.node-version }})
+    needs: oldest-node-versions
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ${{ fromJSON(needs.oldest-node-versions.outputs.versions) }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Downgrade to the oldest supported peer dependencies
+        uses: cloudfour/.github/actions/oldest-peer-dependencies@main
+      - run: npm test
+```
+
+The `name` is optional, but without it the job log shows the step as **Run cloudfour/.github/actions/oldest-peer-dependencies@main**.
+
 ## Workflow templates
 
 Files in `workflow-templates/` appear as starter workflows under **Actions → New workflow** in every repository in the organization. A template is copied into the repository when it's used, so later changes here don't reach repositories that already use it.
