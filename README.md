@@ -75,6 +75,41 @@ Some details:
 - **Releases in progress.** If `package.json` already has a version that isn't on npm yet, the issue says so and closes after the publish.
 - **Inactive repositories.** GitHub turns off scheduled workflows in a public repository after 60 days without activity. The push trigger still runs, but the daily close may stop until someone re-enables the workflow under **Actions**.
 
+### Oldest Node versions
+
+[`oldest-node-versions.yml`](.github/workflows/oldest-node-versions.yml) finds the oldest Node version each part of `engines.node` in `package.json` allows, so CI can test the range a package publishes and not just the current Node. For `^22.13.0 || >=24` it outputs `["22.13.0","24.0.0"]`, ready for a matrix.
+
+It reads the versions at run time on purpose. A `node-version` written into a workflow is something Renovate updates, which would quietly move the test away from the oldest supported version. With this, changing `engines` is the only edit needed.
+
+Each part of the range can be an exact version or start with `^`, `~` or `>=`. A missing minor or patch counts as `0`, so `>=22` means `22.0.0`. A range whose oldest version isn't written in it, such as `>22` or `22.x`, fails the job instead of guessing.
+
+To use it, add a job that calls it to the repository's CI workflow, and a test job that reads its `versions` output:
+
+```yaml
+jobs:
+  oldest-node-versions:
+    uses: cloudfour/.github/.github/workflows/oldest-node-versions.yml@main
+
+  test-oldest-node:
+    name: test (Node ${{ matrix.node-version }})
+    needs: oldest-node-versions
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ${{ fromJSON(needs.oldest-node-versions.outputs.versions) }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+```
+
+The calling workflow needs to grant at least `contents: read`, the permission the job needs to check out the repository.
+
 ## Workflow templates
 
 Files in `workflow-templates/` appear as starter workflows under **Actions → New workflow** in every repository in the organization. A template is copied into the repository when it's used, so later changes here don't reach repositories that already use it.
