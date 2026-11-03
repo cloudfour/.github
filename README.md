@@ -32,6 +32,15 @@ Callers reference `main` rather than a tag, the same choice as [cloudfour/renova
 
 [`dependency-drift.yml`](.github/workflows/dependency-drift.yml) notices when the default branch has dependency changes that users don't have yet. It compares `dependencies`, `optionalDependencies` and `peerDependencies` in `package.json` with the version on npm's `latest` tag, which is what a plain `npm install` gets. When they differ, it opens an issue labeled `unreleased dependencies` that lists each change. It updates that one issue as more changes land, and closes it once a release brings npm up to date.
 
+The issue also helps plan that release:
+
+- **Upstream change:** each row says whether the dependency's own version moved by a `major`, `minor`, `patch` or `prerelease`, or was `added` or `removed`. Exact versions and simple `^` or `~` ranges like `^17.12.0` are compared by their base version. Anything more complex, such as `^1 || ^2`, shows as `range` and is flagged for checking by hand.
+- **What changed:** each row links to the package's diff on [npmdiff.dev](https://npmdiff.dev), or to its npm page when there's no pair of versions to compare.
+- **Suggested release:** a removed dependency, a major upstream release, or any change to `peerDependencies` suggests starting from a major. Everything else suggests patch or minor, depending on whether users see a difference.
+- **Draft changelog:** one bullet per row, ready to copy into the release notes.
+
+The suggestion is a floor based only on version numbers. Only the repository knows how it uses each dependency. A minor `globals` release can be a patch for a config that doesn't use the changed globals, and a minor release of a shared config can add error-level rules, which makes it a major. So review the changes before choosing a release, and add a sentence to each changelog bullet saying what it means for users.
+
 It exists because automerged dependency updates are easy to lose track of. In a package that pins its runtime dependencies, every update needs a release to reach users. In one that uses ranges, as the [`library` Renovate preset](https://github.com/cloudfour/renovate-config#library) does, only an update outside the range or a manual edit does. Lockfile-only updates never show up here, because they don't change what users install.
 
 To use it, add this as `.github/workflows/dependency-drift.yml` in the repository, or pick **Dependency drift check** under **Actions → New workflow**:
