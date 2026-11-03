@@ -1,8 +1,8 @@
 ## Overview
 
-Explain why this change exists: what problem it solves, and how. The
-diff already shows what changed, so focus on what it can't: context,
-trade-offs, and anything a reviewer might otherwise question.
+Explain why this change exists: what problem it solves, and how.
+The diff already shows what changed, so focus on what it can't:
+context, trade-offs, and anything a reviewer might otherwise question.
 
 ## Screenshots
 
