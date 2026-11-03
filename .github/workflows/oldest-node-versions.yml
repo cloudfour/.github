@@ -1,0 +1,44 @@
+name: Oldest Node versions
+
+# Finds the oldest Node version each part of `engines.node` in package.json
+# allows, for example 22.13.0 and 24.0.0 from `^22.13.0 || >=24`, so a caller
+# can test the range it publishes. Reading them at run time, rather than
+# listing them in the caller's matrix, means Renovate doesn't update them and
+# changing `engines` is the only edit needed. See the README for the caller
+# job each repository needs.
+
+on:
+  workflow_call:
+    outputs:
+      versions:
+        description: A JSON array of the oldest Node version in each part of `engines.node`, for a matrix.
+        value: ${{ jobs.read.outputs.versions }}
+
+jobs:
+  read:
+    name: Read engines.node
+    runs-on: ubuntu-latest
+    # The caller has to grant this too; a called workflow can't raise it.
+    permissions:
+      contents: read
+    outputs:
+      versions: ${{ steps.read.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      # Each part is read as an optional `^`, `~` or `>=` and a version, whose
+      # missing minor or patch counts as 0. Anything else, such as `>22` or
+      # `22.x`, fails, since its oldest version isn't the one written down.
+      - name: Read engines.node
+        id: read
+        run: |
+          versions="$(node --print '
+            const range = require("./package.json").engines?.node;
+            if (!range) throw new Error("package.json has no engines.node range to read");
+            JSON.stringify(range.split("||").map((part) => {
+              const match = /^(?:\^|~|>=)?\s*v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\s|$)/.exec(part.trim());
+              if (!match) throw new Error(`Can not find the oldest version in "${part.trim()}"`);
+              return [match[1], match[2] ?? 0, match[3] ?? 0].join(".");
+            }))
+          ')"
+          echo "Oldest supported Node versions: $versions"
+          echo "versions=$versions" >> "$GITHUB_OUTPUT"
